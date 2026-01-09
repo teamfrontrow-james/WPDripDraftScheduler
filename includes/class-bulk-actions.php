@@ -215,28 +215,10 @@ class DDS_Bulk_Actions {
 			// Convert to GMT for WordPress
 			$next_slot_gmt = $this->scheduler->local_to_gmt( $next_slot );
 			
-			// Ensure GMT date is definitely in the future (WordPress checks GMT)
-			$next_slot_gmt_timestamp = strtotime( $next_slot_gmt . ' GMT' );
-			$current_gmt_time = time(); // Current GMT timestamp
-			
-			// If the calculated time is in the past or too close to now, push it forward
-			if ( $next_slot_gmt_timestamp <= $current_gmt_time ) {
-				// Use baseline + interval hours to ensure it's in the future
-				$baseline_gmt = $this->scheduler->local_to_gmt( $baseline );
-				$baseline_gmt_timestamp = strtotime( $baseline_gmt . ' GMT' );
-				$settings = DDS_Settings::get_instance();
-				$interval_hours = absint( $settings->get_setting( 'interval_hours', 24 ) );
-				$next_slot_gmt_timestamp = $baseline_gmt_timestamp + ( $interval_hours * HOUR_IN_SECONDS );
-				
-				// Ensure it's at least 1 minute in the future
-				if ( $next_slot_gmt_timestamp <= $current_gmt_time ) {
-					$next_slot_gmt_timestamp = $current_gmt_time + 60;
-				}
-				
-				$next_slot_gmt = gmdate( 'Y-m-d H:i:s', $next_slot_gmt_timestamp );
-				// Recalculate local time from GMT
-				$next_slot = get_date_from_gmt( $next_slot_gmt );
-			}
+			// Validate and ensure date is in the future using settings
+			$validated_dates = $this->scheduler->ensure_future_date( $next_slot, $next_slot_gmt );
+			$next_slot = $validated_dates['local'];
+			$next_slot_gmt = $validated_dates['gmt'];
 			
 			// Update post - WordPress will automatically schedule if post_date_gmt is in future
 			$update_result = wp_update_post( array(

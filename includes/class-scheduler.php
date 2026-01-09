@@ -54,6 +54,16 @@ class DDS_Scheduler {
 	 * @return DateTimeZone WordPress timezone
 	 */
 	private function get_wp_timezone() {
+		// Check for timezone override setting
+		$timezone_override = $this->settings->get_setting( 'timezone_override', '' );
+		if ( ! empty( $timezone_override ) ) {
+			try {
+				return new DateTimeZone( $timezone_override );
+			} catch ( Exception $e ) {
+				// Invalid override, fall through to WordPress timezone
+			}
+		}
+		
 		// Use WordPress function if available (WordPress 5.3+)
 		if ( function_exists( 'wp_timezone' ) ) {
 			return wp_timezone();
@@ -82,6 +92,35 @@ class DDS_Scheduler {
 			// Ultimate fallback to UTC
 			return new DateTimeZone( 'UTC' );
 		}
+	}
+	
+	/**
+	 * Validate and ensure date is in the future
+	 *
+	 * @param string $date_string Date string to validate
+	 * @param string $gmt_date_string GMT date string to validate
+	 * @return array Array with validated 'local' and 'gmt' date strings
+	 */
+	public function ensure_future_date( $date_string, $gmt_date_string ) {
+		$minimum_minutes = absint( $this->settings->get_setting( 'minimum_future_minutes', 60 ) );
+		$current_gmt_time = time();
+		$gmt_timestamp = strtotime( $gmt_date_string . ' GMT' );
+		
+		// Calculate minimum future timestamp
+		$minimum_future_timestamp = $current_gmt_time + ( $minimum_minutes * 60 );
+		
+		// If the date is not far enough in the future, adjust it
+		if ( $gmt_timestamp <= $minimum_future_timestamp ) {
+			$gmt_timestamp = $minimum_future_timestamp;
+			$gmt_date_string = gmdate( 'Y-m-d H:i:s', $gmt_timestamp );
+			// Recalculate local time from GMT
+			$date_string = get_date_from_gmt( $gmt_date_string );
+		}
+		
+		return array(
+			'local' => $date_string,
+			'gmt'   => $gmt_date_string,
+		);
 	}
 	
 	/**

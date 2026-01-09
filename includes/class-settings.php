@@ -135,6 +135,24 @@ class DDS_Settings {
 			'draft-drip-scheduler',
 			'dds_main_section'
 		);
+		
+		// Minimum Future Minutes field
+		add_settings_field(
+			'minimum_future_minutes',
+			__( 'Minimum Future Minutes', 'draft-drip-scheduler' ),
+			array( $this, 'render_minimum_future_field' ),
+			'draft-drip-scheduler',
+			'dds_main_section'
+		);
+		
+		// Timezone Override field
+		add_settings_field(
+			'timezone_override',
+			__( 'Timezone Override', 'draft-drip-scheduler' ),
+			array( $this, 'render_timezone_field' ),
+			'draft-drip-scheduler',
+			'dds_main_section'
+		);
 	}
 	
 	/**
@@ -170,6 +188,29 @@ class DDS_Settings {
 		if ( isset( $input['random_jitter'] ) ) {
 			$jitter = absint( $input['random_jitter'] );
 			$sanitized['random_jitter'] = $jitter;
+		}
+		
+		// Sanitize minimum future minutes (must be positive integer, default 60)
+		if ( isset( $input['minimum_future_minutes'] ) ) {
+			$minutes = absint( $input['minimum_future_minutes'] );
+			$sanitized['minimum_future_minutes'] = $minutes > 0 ? $minutes : 60;
+		}
+		
+		// Sanitize timezone override
+		if ( isset( $input['timezone_override'] ) ) {
+			$timezone = sanitize_text_field( $input['timezone_override'] );
+			// Validate timezone string
+			if ( ! empty( $timezone ) ) {
+				try {
+					$test_timezone = new DateTimeZone( $timezone );
+					$sanitized['timezone_override'] = $timezone;
+				} catch ( Exception $e ) {
+					// Invalid timezone, don't save
+					$sanitized['timezone_override'] = '';
+				}
+			} else {
+				$sanitized['timezone_override'] = '';
+			}
 		}
 		
 		return $sanitized;
@@ -259,6 +300,52 @@ class DDS_Settings {
 	}
 	
 	/**
+	 * Render minimum future minutes field
+	 */
+	public function render_minimum_future_field() {
+		$settings = $this->get_settings();
+		$value = isset( $settings['minimum_future_minutes'] ) ? absint( $settings['minimum_future_minutes'] ) : 60;
+		?>
+		<input type="number" 
+		       id="minimum_future_minutes" 
+		       name="<?php echo esc_attr( $this->option_name ); ?>[minimum_future_minutes]" 
+		       value="<?php echo esc_attr( $value ); ?>" 
+		       min="1" 
+		       step="1" 
+		       class="small-text" />
+		<p class="description">
+			<?php esc_html_e( 'Minimum minutes in the future that posts must be scheduled. Prevents immediate publishing due to timezone issues. Recommended: 60 minutes.', 'draft-drip-scheduler' ); ?>
+		</p>
+		<?php
+	}
+	
+	/**
+	 * Render timezone override field
+	 */
+	public function render_timezone_field() {
+		$settings = $this->get_settings();
+		$value = isset( $settings['timezone_override'] ) ? $settings['timezone_override'] : '';
+		$wp_timezone = get_option( 'timezone_string' );
+		if ( empty( $wp_timezone ) ) {
+			$gmt_offset = get_option( 'gmt_offset' );
+			$wp_timezone = sprintf( 'UTC%+d', $gmt_offset );
+		}
+		?>
+		<input type="text" 
+		       id="timezone_override" 
+		       name="<?php echo esc_attr( $this->option_name ); ?>[timezone_override]" 
+		       value="<?php echo esc_attr( $value ); ?>" 
+		       placeholder="<?php echo esc_attr( $wp_timezone ); ?>"
+		       class="regular-text" />
+		<p class="description">
+			<?php esc_html_e( 'Override WordPress timezone for scheduling calculations. Leave empty to use WordPress timezone setting. Examples: "America/New_York", "Europe/London", "UTC+5".', 'draft-drip-scheduler' ); ?>
+			<br>
+			<strong><?php esc_html_e( 'Current WordPress Timezone:', 'draft-drip-scheduler' ); ?></strong> <?php echo esc_html( $wp_timezone ); ?>
+		</p>
+		<?php
+	}
+	
+	/**
 	 * Render settings page
 	 */
 	public function render_settings_page() {
@@ -277,9 +364,65 @@ class DDS_Settings {
 		}
 		
 		settings_errors( 'dds_messages' );
+		
+		// Get timezone info for display
+		$wp_timezone_string = get_option( 'timezone_string' );
+		if ( empty( $wp_timezone_string ) ) {
+			$gmt_offset = get_option( 'gmt_offset' );
+			$wp_timezone_string = sprintf( 'UTC%+d', $gmt_offset );
+		}
+		$settings = $this->get_settings();
+		$timezone_override = isset( $settings['timezone_override'] ) ? $settings['timezone_override'] : '';
+		$active_timezone = ! empty( $timezone_override ) ? $timezone_override : $wp_timezone_string;
+		$current_time = current_time( 'Y-m-d H:i:s' );
+		$current_gmt_time = gmdate( 'Y-m-d H:i:s' );
+		$minimum_minutes = absint( $settings['minimum_future_minutes'] );
+		$next_safe_time = date( 'Y-m-d H:i:s', current_time( 'timestamp' ) + ( $minimum_minutes * 60 ) );
 		?>
 		<div class="wrap">
 			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+			
+			<!-- Timezone & Date Info Section -->
+			<div class="card" style="max-width: 800px; margin-bottom: 20px; background: #f0f6fc; border-left: 4px solid #2271b1;">
+				<h2 style="margin-top: 0;"><?php esc_html_e( 'Timezone & Date Information', 'draft-drip-scheduler' ); ?></h2>
+				<table class="form-table" role="presentation">
+					<tbody>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'WordPress Timezone', 'draft-drip-scheduler' ); ?></th>
+							<td><code><?php echo esc_html( $wp_timezone_string ); ?></code></td>
+						</tr>
+						<?php if ( ! empty( $timezone_override ) ) : ?>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Plugin Timezone Override', 'draft-drip-scheduler' ); ?></th>
+							<td><code><?php echo esc_html( $timezone_override ); ?></code> <span style="color: #2271b1;">✓</span></td>
+						</tr>
+						<?php endif; ?>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Active Timezone', 'draft-drip-scheduler' ); ?></th>
+							<td><strong><code><?php echo esc_html( $active_timezone ); ?></code></strong></td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Current Local Time', 'draft-drip-scheduler' ); ?></th>
+							<td><?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $current_time ) ) ); ?></td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Current GMT Time', 'draft-drip-scheduler' ); ?></th>
+							<td><code><?php echo esc_html( $current_gmt_time ); ?></code></td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Minimum Future Minutes', 'draft-drip-scheduler' ); ?></th>
+							<td><?php echo esc_html( $minimum_minutes ); ?> <?php esc_html_e( 'minutes', 'draft-drip-scheduler' ); ?></td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Earliest Safe Schedule Time', 'draft-drip-scheduler' ); ?></th>
+							<td><strong><?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $next_safe_time ) ) ); ?></strong></td>
+						</tr>
+					</tbody>
+				</table>
+				<p class="description" style="margin-top: 15px;">
+					<?php esc_html_e( 'If posts are publishing immediately, check that the "Earliest Safe Schedule Time" is in the future. Increase "Minimum Future Minutes" if needed.', 'draft-drip-scheduler' ); ?>
+				</p>
+			</div>
 			
 			<!-- Schedule Now Section -->
 			<div class="card" style="max-width: 800px; margin-bottom: 20px;">
@@ -424,27 +567,10 @@ class DDS_Settings {
 				// Convert to GMT for WordPress
 				$next_slot_gmt = $this->get_scheduler()->local_to_gmt( $next_slot );
 				
-				// Ensure GMT date is definitely in the future (WordPress checks GMT)
-				$next_slot_gmt_timestamp = strtotime( $next_slot_gmt . ' GMT' );
-				$current_gmt_time = time(); // Current GMT timestamp
-				
-				// If the calculated time is in the past or too close to now, push it forward
-				if ( $next_slot_gmt_timestamp <= $current_gmt_time ) {
-					// Use baseline + interval hours to ensure it's in the future
-					$baseline_gmt = $this->get_scheduler()->local_to_gmt( $baseline );
-					$baseline_gmt_timestamp = strtotime( $baseline_gmt . ' GMT' );
-					$interval_hours = absint( $this->get_setting( 'interval_hours', 24 ) );
-					$next_slot_gmt_timestamp = $baseline_gmt_timestamp + ( $interval_hours * HOUR_IN_SECONDS );
-					
-					// Ensure it's at least 1 minute in the future
-					if ( $next_slot_gmt_timestamp <= $current_gmt_time ) {
-						$next_slot_gmt_timestamp = $current_gmt_time + 60;
-					}
-					
-					$next_slot_gmt = gmdate( 'Y-m-d H:i:s', $next_slot_gmt_timestamp );
-					// Recalculate local time from GMT
-					$next_slot = get_date_from_gmt( $next_slot_gmt );
-				}
+				// Validate and ensure date is in the future using settings
+				$validated_dates = $this->get_scheduler()->ensure_future_date( $next_slot, $next_slot_gmt );
+				$next_slot = $validated_dates['local'];
+				$next_slot_gmt = $validated_dates['gmt'];
 				
 				// Update post - WordPress will automatically schedule if post_date_gmt is in future
 				$update_result = wp_update_post( array(
@@ -591,10 +717,12 @@ class DDS_Settings {
 	 */
 	public function get_settings() {
 		$defaults = array(
-			'default_start_time' => '08:00',
-			'interval_hours'     => 24,
-			'skip_weekends'      => 0,
-			'random_jitter'      => 0,
+			'default_start_time'      => '08:00',
+			'interval_hours'          => 24,
+			'skip_weekends'           => 0,
+			'random_jitter'           => 0,
+			'minimum_future_minutes'  => 60,
+			'timezone_override'       => '',
 		);
 		
 		$settings = get_option( $this->option_name, array() );

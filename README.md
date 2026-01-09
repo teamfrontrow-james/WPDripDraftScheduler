@@ -30,6 +30,18 @@ Navigate to **Settings > Drip Scheduler** to configure:
 - **Interval (Hours)**: Time between each scheduled post (e.g., 24 for daily posts)
 - **Skip Weekends**: Checkbox to avoid scheduling on Saturdays or Sundays
 - **Random Jitter (Minutes)**: Randomly adjust schedule time by ±X minutes (set to 0 to disable)
+- **Minimum Future Minutes**: Minimum minutes in the future that posts must be scheduled (default: 60). Prevents immediate publishing due to timezone issues. Increase if posts are publishing immediately.
+- **Timezone Override**: Override WordPress timezone for scheduling calculations. Leave empty to use WordPress timezone. Examples: "America/New_York", "Europe/London", "UTC+5"
+
+### Troubleshooting Immediate Publishing
+
+If drafts are publishing immediately instead of being scheduled:
+
+1. Check the **Timezone & Date Information** section on the settings page
+2. Verify the "Earliest Safe Schedule Time" is in the future
+3. Increase **Minimum Future Minutes** (try 120 or 180 minutes)
+4. Set **Timezone Override** if WordPress timezone is incorrect
+5. Ensure your WordPress timezone setting (Settings > General) is correct
 
 ## Usage
 
