@@ -99,6 +99,15 @@ If you set jitter to 30 minutes, each scheduled time will be randomly adjusted b
 
 ## Changelog
 
+### 1.1.0
+- Added timezone override setting for scheduling calculations
+- Added minimum future minutes setting to prevent immediate publishing
+- Implemented multi-layer future date validation with safety buffers
+- Added timezone and date information panel in settings
+- Improved date validation using multiple time sources
+- Enhanced reliability to prevent posts from publishing immediately
+- Removed external API dependency
+
 ### 1.0.0
 - Initial release
 - Bulk scheduling for all public post types
