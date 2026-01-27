@@ -220,6 +220,15 @@ class DDS_Bulk_Actions {
 			$next_slot = $validated_dates['local'];
 			$next_slot_gmt = $validated_dates['gmt'];
 			
+			// Final validation: double-check that GMT date is in the future
+			if ( ! $this->scheduler->is_future_date( $next_slot_gmt ) ) {
+				// Force it to be at least 15 minutes in the future
+				$current_gmt = time();
+				$next_slot_gmt_timestamp = $current_gmt + 900; // 15 minutes
+				$next_slot_gmt = gmdate( 'Y-m-d H:i:s', $next_slot_gmt_timestamp );
+				$next_slot = get_date_from_gmt( $next_slot_gmt );
+			}
+			
 			// Update post - WordPress will automatically schedule if post_date_gmt is in future
 			$update_result = wp_update_post( array(
 				'ID'            => $post_id,

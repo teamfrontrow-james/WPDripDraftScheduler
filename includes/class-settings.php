@@ -379,24 +379,10 @@ class DDS_Settings {
 		$current_server_timestamp = time();
 		$minimum_minutes = absint( $settings['minimum_future_minutes'] );
 		
-		// Get API time for comparison
-		$scheduler = $this->get_scheduler();
-		$api_time = $scheduler->get_api_time( $active_timezone );
-		$api_available = false;
-		$api_gmt_time = '';
-		$api_timestamp = 0;
-		$time_difference = 0;
-		
-		if ( $api_time && isset( $api_time['unixtime'] ) ) {
-			$api_available = true;
-			$api_timestamp = $api_time['unixtime'];
-			$api_gmt_time = gmdate( 'Y-m-d H:i:s', $api_timestamp );
-			$time_difference = $api_timestamp - $current_server_timestamp;
-		}
-		
-		// Use API time if available, otherwise use server time
-		$accurate_timestamp = $api_available ? $api_timestamp : $current_server_timestamp;
-		$next_safe_time = date( 'Y-m-d H:i:s', $accurate_timestamp + ( $minimum_minutes * 60 ) );
+		// Calculate safe future time with buffer
+		$safety_buffer = 300; // 5 minutes buffer
+		$next_safe_timestamp = $current_server_timestamp + ( $minimum_minutes * 60 ) + $safety_buffer;
+		$next_safe_time = date( 'Y-m-d H:i:s', $next_safe_timestamp );
 		?>
 		<div class="wrap">
 			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
@@ -421,44 +407,13 @@ class DDS_Settings {
 							<td><strong><code><?php echo esc_html( $active_timezone ); ?></code></strong></td>
 						</tr>
 						<tr>
-							<th scope="row"><?php esc_html_e( 'WorldTimeAPI Status', 'draft-drip-scheduler' ); ?></th>
-							<td>
-								<?php if ( $api_available ) : ?>
-									<span style="color: #00a32a;">✓ <?php esc_html_e( 'Connected', 'draft-drip-scheduler' ); ?></span>
-								<?php else : ?>
-									<span style="color: #d63638;">✗ <?php esc_html_e( 'Unavailable (using server time)', 'draft-drip-scheduler' ); ?></span>
-								<?php endif; ?>
-							</td>
+							<th scope="row"><?php esc_html_e( 'Current GMT Time', 'draft-drip-scheduler' ); ?></th>
+							<td><code><?php echo esc_html( $current_gmt_time ); ?></code> (timestamp: <?php echo esc_html( $current_server_timestamp ); ?>)</td>
 						</tr>
 						<tr>
-							<th scope="row"><?php esc_html_e( 'Server GMT Time', 'draft-drip-scheduler' ); ?></th>
-							<td><code><?php echo esc_html( $current_gmt_time ); ?></code> (<?php echo esc_html( $current_server_timestamp ); ?>)</td>
+							<th scope="row"><?php esc_html_e( 'Safety Buffer', 'draft-drip-scheduler' ); ?></th>
+							<td><?php esc_html_e( '5 minutes', 'draft-drip-scheduler' ); ?> + <?php echo esc_html( $minimum_minutes ); ?> <?php esc_html_e( 'minutes minimum', 'draft-drip-scheduler' ); ?></td>
 						</tr>
-						<?php if ( $api_available ) : ?>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'API GMT Time', 'draft-drip-scheduler' ); ?></th>
-							<td><code><?php echo esc_html( $api_gmt_time ); ?></code> (<?php echo esc_html( $api_timestamp ); ?>)</td>
-						</tr>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'Time Difference', 'draft-drip-scheduler' ); ?></th>
-							<td>
-								<?php
-								if ( abs( $time_difference ) > 60 ) {
-									$color = '#d63638';
-									$icon = '⚠';
-								} else {
-									$color = '#00a32a';
-									$icon = '✓';
-								}
-								?>
-								<span style="color: <?php echo esc_attr( $color ); ?>;">
-									<?php echo esc_html( $icon ); ?> 
-									<?php echo esc_html( $time_difference > 0 ? '+' : '' ); ?><?php echo esc_html( $time_difference ); ?> 
-									<?php esc_html_e( 'seconds', 'draft-drip-scheduler' ); ?>
-								</span>
-							</td>
-						</tr>
-						<?php endif; ?>
 						<tr>
 							<th scope="row"><?php esc_html_e( 'Current Local Time', 'draft-drip-scheduler' ); ?></th>
 							<td><?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $current_time ) ) ); ?></td>
@@ -474,7 +429,7 @@ class DDS_Settings {
 					</tbody>
 				</table>
 				<p class="description" style="margin-top: 15px;">
-					<?php esc_html_e( 'The plugin uses WorldTimeAPI to verify accurate time before scheduling. If posts are publishing immediately, check that the "Earliest Safe Schedule Time" is in the future. Increase "Minimum Future Minutes" if needed.', 'draft-drip-scheduler' ); ?>
+					<?php esc_html_e( 'The plugin uses multiple validation methods to ensure posts are scheduled in the future. A 5-minute safety buffer is automatically added. If posts are publishing immediately, increase "Minimum Future Minutes" (try 120 or 180).', 'draft-drip-scheduler' ); ?>
 				</p>
 			</div>
 			
@@ -625,6 +580,15 @@ class DDS_Settings {
 				$validated_dates = $this->get_scheduler()->ensure_future_date( $next_slot, $next_slot_gmt );
 				$next_slot = $validated_dates['local'];
 				$next_slot_gmt = $validated_dates['gmt'];
+				
+				// Final validation: double-check that GMT date is in the future
+				if ( ! $this->get_scheduler()->is_future_date( $next_slot_gmt ) ) {
+					// Force it to be at least 15 minutes in the future
+					$current_gmt = time();
+					$next_slot_gmt_timestamp = $current_gmt + 900; // 15 minutes
+					$next_slot_gmt = gmdate( 'Y-m-d H:i:s', $next_slot_gmt_timestamp );
+					$next_slot = get_date_from_gmt( $next_slot_gmt );
+				}
 				
 				// Update post - WordPress will automatically schedule if post_date_gmt is in future
 				$update_result = wp_update_post( array(

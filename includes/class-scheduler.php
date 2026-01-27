@@ -95,102 +95,64 @@ class DDS_Scheduler {
 	}
 	
 	/**
-	 * Get current UTC time from WorldTimeAPI
+	 * Get current GMT timestamp with multiple validation methods
 	 *
-	 * @param string $timezone Timezone to use (e.g., 'America/Chicago')
-	 * @return array|false Array with 'utc_datetime' and 'unixtime', or false on failure
+	 * @return int GMT timestamp
 	 */
-	public function get_api_time( $timezone = null ) {
-		// Get timezone override or WordPress timezone
-		if ( empty( $timezone ) ) {
-			$timezone_override = $this->settings->get_setting( 'timezone_override', '' );
-			if ( ! empty( $timezone_override ) ) {
-				$timezone = $timezone_override;
-			} else {
-				$wp_timezone = get_option( 'timezone_string' );
-				if ( ! empty( $wp_timezone ) ) {
-					$timezone = $wp_timezone;
-				} else {
-					// Fallback to UTC if no timezone available
-					$timezone = 'UTC';
-				}
-			}
+	private function get_current_gmt_timestamp() {
+		// Use multiple methods to get current time for reliability
+		$methods = array();
+		
+		// Method 1: PHP time() function
+		$methods[] = time();
+		
+		// Method 2: WordPress current_time('timestamp', true) - GMT
+		$methods[] = current_time( 'timestamp', true );
+		
+		// Method 3: DateTime UTC
+		try {
+			$utc = new DateTime( 'now', new DateTimeZone( 'UTC' ) );
+			$methods[] = $utc->getTimestamp();
+		} catch ( Exception $e ) {
+			// Ignore
 		}
 		
-		// Convert timezone to API format (replace spaces with underscores)
-		$api_timezone = str_replace( ' ', '_', $timezone );
-		
-		// Build API URL
-		$api_url = 'http://worldtimeapi.org/api/timezone/' . urlencode( $api_timezone );
-		
-		// Fetch time from API with timeout
-		$response = wp_remote_get( $api_url, array(
-			'timeout' => 5,
-			'sslverify' => false,
-		) );
-		
-		if ( is_wp_error( $response ) ) {
-			return false;
-		}
-		
-		$body = wp_remote_retrieve_body( $response );
-		$data = json_decode( $body, true );
-		
-		if ( ! isset( $data['utc_datetime'] ) || ! isset( $data['unixtime'] ) ) {
-			return false;
-		}
-		
-		return array(
-			'utc_datetime' => $data['utc_datetime'],
-			'unixtime'     => $data['unixtime'],
-			'timezone'     => $data['timezone'],
-		);
+		// Use the maximum (most future) timestamp to be safe
+		// This ensures we're not using a time that's behind
+		return max( $methods );
 	}
 	
 	/**
-	 * Get accurate current time (preferring API, falling back to server time)
-	 *
-	 * @return array Array with 'gmt_timestamp' and 'gmt_datetime'
-	 */
-	private function get_accurate_current_time() {
-		// Try to get time from API
-		$api_time = $this->get_api_time();
-		
-		if ( $api_time && isset( $api_time['unixtime'] ) ) {
-			// Use API time
-			$gmt_timestamp = $api_time['unixtime'];
-			$gmt_datetime = gmdate( 'Y-m-d H:i:s', $gmt_timestamp );
-		} else {
-			// Fallback to server time
-			$gmt_timestamp = time();
-			$gmt_datetime = gmdate( 'Y-m-d H:i:s', $gmt_timestamp );
-		}
-		
-		return array(
-			'gmt_timestamp' => $gmt_timestamp,
-			'gmt_datetime'  => $gmt_datetime,
-		);
-	}
-	
-	/**
-	 * Validate and ensure date is in the future
+	 * Validate and ensure date is in the future with multiple checks
 	 *
 	 * @param string $date_string Date string to validate
 	 * @param string $gmt_date_string GMT date string to validate
-	 * @return array Array with validated 'local' and 'gmt' date strings
+	 * @return array Array with validated 'local' and 'gmt' date strings, or false if validation fails
 	 */
 	public function ensure_future_date( $date_string, $gmt_date_string ) {
 		$minimum_minutes = absint( $this->settings->get_setting( 'minimum_future_minutes', 60 ) );
 		
-		// Get accurate current time (preferring API)
-		$current_time = $this->get_accurate_current_time();
-		$current_gmt_timestamp = $current_time['gmt_timestamp'];
+		// Get current GMT timestamp using multiple methods
+		$current_gmt_timestamp = $this->get_current_gmt_timestamp();
 		
-		// Parse the GMT date string
+		// Parse the GMT date string - try multiple methods
 		$gmt_timestamp = strtotime( $gmt_date_string . ' GMT' );
+		if ( $gmt_timestamp === false ) {
+			// Try parsing as-is
+			$gmt_timestamp = strtotime( $gmt_date_string );
+		}
 		
-		// Calculate minimum future timestamp
+		// If parsing failed, calculate from current time
+		if ( $gmt_timestamp === false ) {
+			$gmt_timestamp = $current_gmt_timestamp + ( $minimum_minutes * 60 );
+		}
+		
+		// Calculate minimum future timestamp (add buffer)
 		$minimum_future_timestamp = $current_gmt_timestamp + ( $minimum_minutes * 60 );
+		
+		// Add extra buffer of 5 minutes for safety
+		$safety_buffer = 300; // 5 minutes in seconds
+		$minimum_future_timestamp += $safety_buffer;
 		
 		// If the date is not far enough in the future, adjust it
 		if ( $gmt_timestamp <= $minimum_future_timestamp ) {
@@ -200,10 +162,37 @@ class DDS_Scheduler {
 			$date_string = get_date_from_gmt( $gmt_date_string );
 		}
 		
+		// Final validation: ensure GMT timestamp is definitely in the future
+		$final_check_timestamp = $this->get_current_gmt_timestamp();
+		if ( $gmt_timestamp <= $final_check_timestamp ) {
+			// Force it to be at least 10 minutes in the future
+			$gmt_timestamp = $final_check_timestamp + 600; // 10 minutes
+			$gmt_date_string = gmdate( 'Y-m-d H:i:s', $gmt_timestamp );
+			$date_string = get_date_from_gmt( $gmt_date_string );
+		}
+		
 		return array(
 			'local' => $date_string,
 			'gmt'   => $gmt_date_string,
 		);
+	}
+	
+	/**
+	 * Validate that a GMT date string is in the future
+	 *
+	 * @param string $gmt_date_string GMT date string
+	 * @return bool True if date is in the future, false otherwise
+	 */
+	public function is_future_date( $gmt_date_string ) {
+		$current_gmt_timestamp = $this->get_current_gmt_timestamp();
+		$gmt_timestamp = strtotime( $gmt_date_string . ' GMT' );
+		
+		if ( $gmt_timestamp === false ) {
+			return false;
+		}
+		
+		// Add 1 minute buffer
+		return $gmt_timestamp > ( $current_gmt_timestamp + 60 );
 	}
 	
 	/**
