@@ -590,6 +590,12 @@ class DDS_Settings {
 					$next_slot = get_date_from_gmt( $next_slot_gmt );
 				}
 				
+				// Log for debugging (stored in post meta temporarily)
+				update_post_meta( $post_id, '_dds_debug_local_date', $next_slot );
+				update_post_meta( $post_id, '_dds_debug_gmt_date', $next_slot_gmt );
+				update_post_meta( $post_id, '_dds_debug_gmt_timestamp', strtotime( $next_slot_gmt . ' GMT' ) );
+				update_post_meta( $post_id, '_dds_debug_current_gmt', time() );
+				
 				// Update post - WordPress will automatically schedule if post_date_gmt is in future
 				$update_result = wp_update_post( array(
 					'ID'            => $post_id,
@@ -597,6 +603,11 @@ class DDS_Settings {
 					'post_date'     => $next_slot,
 					'post_date_gmt' => $next_slot_gmt,
 				), true );
+				
+				// Log the result
+				update_post_meta( $post_id, '_dds_debug_result', is_wp_error( $update_result ) ? $update_result->get_error_message() : 'success' );
+				$post_after = get_post( $post_id );
+				update_post_meta( $post_id, '_dds_debug_final_status', $post_after->post_status );
 				
 				if ( is_wp_error( $update_result ) ) {
 					$failed_count++;

@@ -253,7 +253,7 @@ class DDS_Scheduler {
 	
 	/**
 	 * Get the baseline date for scheduling
-	 * This finds the latest future post or uses tomorrow at default start time
+	 * This finds the latest future post or uses current time + minimum buffer
 	 *
 	 * @param string $post_type Post type to check
 	 * @return string Baseline datetime string (Y-m-d H:i:s format)
@@ -273,28 +273,26 @@ class DDS_Scheduler {
 		) );
 		
 		if ( $latest_future ) {
-			// Use the latest future post's date as baseline
-			return $latest_future;
+			// Verify the future post is actually in the future
+			$latest_future_gmt = $this->local_to_gmt( $latest_future );
+			if ( $this->is_future_date( $latest_future_gmt ) ) {
+				return $latest_future;
+			}
 		}
 		
-		// No future posts found, use tomorrow at default start time
-		$default_start_time = $this->settings->get_setting( 'default_start_time', '08:00' );
+		// No future posts found or they're in the past
+		// Start from RIGHT NOW + minimum buffer
+		$minimum_minutes = absint( $this->settings->get_setting( 'minimum_future_minutes', 60 ) );
+		$current_gmt = $this->get_current_gmt_timestamp();
 		
-		// Get WordPress timezone
-		$timezone = $this->get_wp_timezone();
+		// Add minimum minutes + 5 minute safety buffer
+		$baseline_timestamp = $current_gmt + ( $minimum_minutes * 60 ) + 300;
 		
-		try {
-			$tomorrow = new DateTime( 'tomorrow', $timezone );
-			
-			// Set the time to default start time
-			list( $hour, $minute ) = explode( ':', $default_start_time );
-			$tomorrow->setTime( (int) $hour, (int) $minute, 0 );
-			
-			return $tomorrow->format( 'Y-m-d H:i:s' );
-		} catch ( Exception $e ) {
-			// Fallback to current time + 24 hours
-			return date( 'Y-m-d H:i:s', strtotime( '+24 hours', current_time( 'timestamp' ) ) );
-		}
+		// Convert from GMT timestamp to local datetime string
+		$baseline_gmt = gmdate( 'Y-m-d H:i:s', $baseline_timestamp );
+		$baseline_local = get_date_from_gmt( $baseline_gmt );
+		
+		return $baseline_local;
 	}
 	
 	/**

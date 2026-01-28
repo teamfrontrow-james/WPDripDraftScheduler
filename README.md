@@ -99,6 +99,13 @@ If you set jitter to 30 minutes, each scheduled time will be randomly adjusted b
 
 ## Changelog
 
+### 1.1.1
+- Fixed critical bug where posts would publish immediately on first install
+- Improved baseline date calculation to always start from current time + buffer
+- Added debug logging to post meta for troubleshooting
+- Fixed timezone handling in baseline calculation
+- Baseline now uses current GMT time + minimum minutes instead of "tomorrow"
+
 ### 1.1.0
 - Added timezone override setting for scheduling calculations
 - Added minimum future minutes setting to prevent immediate publishing
