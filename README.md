@@ -99,6 +99,11 @@ If you set jitter to 30 minutes, each scheduled time will be randomly adjusted b
 
 ## Changelog
 
+### 1.1.2
+- Fixed bug where posts would publish immediately instead of being scheduled when using bulk scheduling from the app home
+- Added `edit_date => true` parameter to `wp_update_post()` calls - this is required for WordPress to respect the post_date values
+- Fix applies to both the Settings page "Schedule Now" feature and the Posts list bulk action
+
 ### 1.1.1
 - Fixed critical bug where posts would publish immediately on first install
 - Improved baseline date calculation to always start from current time + buffer
