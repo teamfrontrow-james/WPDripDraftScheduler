@@ -236,11 +236,14 @@ class DDS_Bulk_Actions {
 			update_post_meta( $post_id, '_dds_debug_current_gmt', time() );
 			
 			// Update post - WordPress will automatically schedule if post_date_gmt is in future
+			// IMPORTANT: 'edit_date' => true is required to tell WordPress to respect the post_date values
+			// Without this, WordPress may ignore the dates and publish immediately
 			$update_result = wp_update_post( array(
 				'ID'            => $post_id,
 				'post_status'   => 'future',
 				'post_date'     => $next_slot,
 				'post_date_gmt' => $next_slot_gmt,
+				'edit_date'     => true,
 			), true );
 			
 			// Log the result

@@ -3,7 +3,7 @@
  * Plugin Name: Draft Drip Scheduler
  * Plugin URI: http://frontrowsales.com
  * Description: Bulk schedule draft posts to publish sequentially in the future (drip feed) with weekend skipping and time jitter options.
- * Version: 1.1.1
+ * Version: 1.1.2
  * Author: James Ross
  * Author URI: http://frontrowsales.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants
-define( 'DDS_VERSION', '1.1.1' );
+define( 'DDS_VERSION', '1.1.2' );
 define( 'DDS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'DDS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'DDS_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
