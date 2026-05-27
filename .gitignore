@@ -27,5 +27,7 @@ Thumbs.db
 *.zip
 *.tar.gz
 
-# Node modules (if any)
+# Dependencies
+/vendor/
 node_modules/
+composer.lock

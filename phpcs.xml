@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<ruleset name="Draft Drip Scheduler">
+	<description>WordPress Coding Standards configuration for Draft Drip Scheduler.</description>
+
+	<arg name="basepath" value="."/>
+	<arg name="colors"/>
+	<arg name="extensions" value="php"/>
+	<arg name="parallel" value="8"/>
+	<arg name="warning-severity" value="5"/>
+
+	<!-- Surface warnings in reports, but only fail the build on errors. -->
+	<config name="ignore_warnings_on_exit" value="1"/>
+
+	<file>.</file>
+
+	<exclude-pattern>*/.git/*</exclude-pattern>
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+
+	<config name="minimum_supported_wp_version" value="5.0"/>
+	<config name="testVersion" value="7.2-"/>
+	<config name="text_domain" value="draft-drip-scheduler"/>
+
+	<rule ref="WordPress"/>
+	<rule ref="PHPCompatibilityWP"/>
+
+	<!-- Keep lint focused on actionable compatibility, security, and WordPress issues. -->
+	<rule ref="Squiz.Commenting.InlineComment.InvalidEndChar">
+		<severity>0</severity>
+	</rule>
+	<rule ref="Squiz.Commenting.FunctionComment.ParamCommentFullStop">
+		<severity>0</severity>
+	</rule>
+</ruleset>

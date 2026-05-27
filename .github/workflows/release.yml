@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release-zip:
+    name: Build release zip
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build plugin zip
+        run: |
+          PLUGIN_SLUG="draft-drip-scheduler"
+          rm -rf build "${PLUGIN_SLUG}.zip"
+          mkdir -p "build/${PLUGIN_SLUG}"
+          rsync -av \
+            --exclude='build' \
+            --exclude='.git' \
+            --exclude='.gitignore' \
+            --exclude='.github' \
+            --exclude='docs' \
+            --exclude='vendor' \
+            --exclude='composer.json' \
+            --exclude='composer.lock' \
+            --exclude='phpcs.xml' \
+            --exclude='PUBLIC_READINESS_PLAN.md' \
+            --exclude='README.md' \
+            --exclude='RELEASING.md' \
+            --exclude='*.zip' \
+            ./ "build/${PLUGIN_SLUG}/"
+          cd build
+          zip -r "../${PLUGIN_SLUG}.zip" "${PLUGIN_SLUG}"
+
+      - name: Attach zip to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: draft-drip-scheduler.zip
+          generate_release_notes: true

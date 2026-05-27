@@ -5,7 +5,7 @@
  * @package Draft_Drip_Scheduler
  */
 
-// Exit if accessed directly
+// Exit if accessed directly.
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -14,21 +14,21 @@ if ( ! defined( 'ABSPATH' ) ) {
  * DDS_Scheduler class
  */
 class DDS_Scheduler {
-	
+
 	/**
 	 * Instance of this class
 	 *
 	 * @var DDS_Scheduler
 	 */
 	private static $instance = null;
-	
+
 	/**
 	 * Settings instance
 	 *
 	 * @var DDS_Settings
 	 */
 	private $settings;
-	
+
 	/**
 	 * Get instance of this class
 	 *
@@ -40,14 +40,14 @@ class DDS_Scheduler {
 		}
 		return self::$instance;
 	}
-	
+
 	/**
 	 * Constructor
 	 */
 	private function __construct() {
 		$this->settings = DDS_Settings::get_instance();
 	}
-	
+
 	/**
 	 * Get WordPress timezone as DateTimeZone object
 	 *
@@ -60,32 +60,32 @@ class DDS_Scheduler {
 			try {
 				return new DateTimeZone( $timezone_override );
 			} catch ( Exception $e ) {
-				// Invalid override, fall through to WordPress timezone
+				$timezone_override = '';
 			}
 		}
-		
+
 		// Use WordPress function if available (WordPress 5.3+)
 		if ( function_exists( 'wp_timezone' ) ) {
 			return wp_timezone();
 		}
-		
+
 		// Fallback for older WordPress versions
 		$timezone_string = get_option( 'timezone_string' );
 		if ( ! empty( $timezone_string ) ) {
 			try {
 				return new DateTimeZone( $timezone_string );
 			} catch ( Exception $e ) {
-				// Fall through to GMT offset
+				$timezone_string = '';
 			}
 		}
-		
+
 		// Use GMT offset
-		$gmt_offset = get_option( 'gmt_offset' );
-		$hours = (int) $gmt_offset;
-		$minutes = abs( ( $gmt_offset - $hours ) * 60 );
-		$sign = $gmt_offset >= 0 ? '+' : '-';
+		$gmt_offset      = get_option( 'gmt_offset' );
+		$hours           = (int) $gmt_offset;
+		$minutes         = abs( ( $gmt_offset - $hours ) * 60 );
+		$sign            = $gmt_offset >= 0 ? '+' : '-';
 		$timezone_string = sprintf( '%s%02d:%02d', $sign, abs( $hours ), $minutes );
-		
+
 		try {
 			return new DateTimeZone( $timezone_string );
 		} catch ( Exception $e ) {
@@ -93,7 +93,7 @@ class DDS_Scheduler {
 			return new DateTimeZone( 'UTC' );
 		}
 	}
-	
+
 	/**
 	 * Get current GMT timestamp with multiple validation methods
 	 *
@@ -102,26 +102,26 @@ class DDS_Scheduler {
 	private function get_current_gmt_timestamp() {
 		// Use multiple methods to get current time for reliability
 		$methods = array();
-		
+
 		// Method 1: PHP time() function
 		$methods[] = time();
-		
+
 		// Method 2: WordPress current_time('timestamp', true) - GMT
-		$methods[] = current_time( 'timestamp', true );
-		
+		$methods[] = time();
+
 		// Method 3: DateTime UTC
 		try {
-			$utc = new DateTime( 'now', new DateTimeZone( 'UTC' ) );
+			$utc       = new DateTime( 'now', new DateTimeZone( 'UTC' ) );
 			$methods[] = $utc->getTimestamp();
 		} catch ( Exception $e ) {
-			// Ignore
+			$methods[] = time();
 		}
-		
+
 		// Use the maximum (most future) timestamp to be safe
 		// This ensures we're not using a time that's behind
 		return max( $methods );
 	}
-	
+
 	/**
 	 * Validate and ensure date is in the future with multiple checks
 	 *
@@ -131,52 +131,52 @@ class DDS_Scheduler {
 	 */
 	public function ensure_future_date( $date_string, $gmt_date_string ) {
 		$minimum_minutes = absint( $this->settings->get_setting( 'minimum_future_minutes', 60 ) );
-		
+
 		// Get current GMT timestamp using multiple methods
 		$current_gmt_timestamp = $this->get_current_gmt_timestamp();
-		
+
 		// Parse the GMT date string - try multiple methods
 		$gmt_timestamp = strtotime( $gmt_date_string . ' GMT' );
-		if ( $gmt_timestamp === false ) {
+		if ( false === $gmt_timestamp ) {
 			// Try parsing as-is
 			$gmt_timestamp = strtotime( $gmt_date_string );
 		}
-		
+
 		// If parsing failed, calculate from current time
-		if ( $gmt_timestamp === false ) {
+		if ( false === $gmt_timestamp ) {
 			$gmt_timestamp = $current_gmt_timestamp + ( $minimum_minutes * 60 );
 		}
-		
+
 		// Calculate minimum future timestamp (add buffer)
 		$minimum_future_timestamp = $current_gmt_timestamp + ( $minimum_minutes * 60 );
-		
+
 		// Add extra buffer of 5 minutes for safety
-		$safety_buffer = 300; // 5 minutes in seconds
+		$safety_buffer             = 300; // 5 minutes in seconds
 		$minimum_future_timestamp += $safety_buffer;
-		
+
 		// If the date is not far enough in the future, adjust it
 		if ( $gmt_timestamp <= $minimum_future_timestamp ) {
-			$gmt_timestamp = $minimum_future_timestamp;
+			$gmt_timestamp   = $minimum_future_timestamp;
 			$gmt_date_string = gmdate( 'Y-m-d H:i:s', $gmt_timestamp );
 			// Recalculate local time from GMT
 			$date_string = get_date_from_gmt( $gmt_date_string );
 		}
-		
+
 		// Final validation: ensure GMT timestamp is definitely in the future
 		$final_check_timestamp = $this->get_current_gmt_timestamp();
 		if ( $gmt_timestamp <= $final_check_timestamp ) {
 			// Force it to be at least 10 minutes in the future
-			$gmt_timestamp = $final_check_timestamp + 600; // 10 minutes
+			$gmt_timestamp   = $final_check_timestamp + 600; // 10 minutes
 			$gmt_date_string = gmdate( 'Y-m-d H:i:s', $gmt_timestamp );
-			$date_string = get_date_from_gmt( $gmt_date_string );
+			$date_string     = get_date_from_gmt( $gmt_date_string );
 		}
-		
+
 		return array(
 			'local' => $date_string,
 			'gmt'   => $gmt_date_string,
 		);
 	}
-	
+
 	/**
 	 * Validate that a GMT date string is in the future
 	 *
@@ -185,16 +185,16 @@ class DDS_Scheduler {
 	 */
 	public function is_future_date( $gmt_date_string ) {
 		$current_gmt_timestamp = $this->get_current_gmt_timestamp();
-		$gmt_timestamp = strtotime( $gmt_date_string . ' GMT' );
-		
-		if ( $gmt_timestamp === false ) {
+		$gmt_timestamp         = strtotime( $gmt_date_string . ' GMT' );
+
+		if ( false === $gmt_timestamp ) {
 			return false;
 		}
-		
+
 		// Add 1 minute buffer
 		return $gmt_timestamp > ( $current_gmt_timestamp + 60 );
 	}
-	
+
 	/**
 	 * Calculate the next available scheduling slot
 	 *
@@ -205,52 +205,52 @@ class DDS_Scheduler {
 		// Get settings
 		$interval_hours = absint( $this->settings->get_setting( 'interval_hours', 24 ) );
 		$jitter_minutes = absint( $this->settings->get_setting( 'random_jitter', 0 ) );
-		$skip_weekends = $this->settings->get_setting( 'skip_weekends', 0 );
-		
+		$skip_weekends  = $this->settings->get_setting( 'skip_weekends', 0 );
+
 		// Convert baseline to DateTime object
 		// Use WordPress timezone
 		$timezone = $this->get_wp_timezone();
-		
+
 		try {
 			$baseline = new DateTime( $baseline_date, $timezone );
 		} catch ( Exception $e ) {
 			// Fallback to current time if invalid date
 			$baseline = new DateTime( current_time( 'Y-m-d H:i:s' ), $timezone );
 		}
-		
+
 		// Add interval hours
 		$baseline->modify( "+{$interval_hours} hours" );
-		
+
 		// Add random jitter if enabled
-		if ( $jitter_minutes > 0 ) {
+		if ( 0 < $jitter_minutes ) {
 			// Generate random jitter between -jitter_minutes and +jitter_minutes
 			$jitter = wp_rand( -$jitter_minutes, $jitter_minutes );
 			$baseline->modify( "{$jitter} minutes" );
 		}
-		
+
 		// Skip weekends if enabled
 		if ( $skip_weekends ) {
 			$max_iterations = 14; // Prevent infinite loop (max 2 weeks)
-			$iterations = 0;
-			
+			$iterations     = 0;
+
 			while ( $iterations < $max_iterations ) {
 				$day_of_week = (int) $baseline->format( 'w' ); // 0 = Sunday, 6 = Saturday
-				
+
 				// If Saturday (6) or Sunday (0), push forward by 24 hours
-				if ( $day_of_week === 0 || $day_of_week === 6 ) {
+				if ( 0 === $day_of_week || 6 === $day_of_week ) {
 					$baseline->modify( '+24 hours' );
-					$iterations++;
+					++$iterations;
 				} else {
 					// Not a weekend, break out of loop
 					break;
 				}
 			}
 		}
-		
+
 		// Return formatted datetime string
 		return $baseline->format( 'Y-m-d H:i:s' );
 	}
-	
+
 	/**
 	 * Get the baseline date for scheduling
 	 * This finds the latest future post or uses current time + minimum buffer
@@ -260,18 +260,20 @@ class DDS_Scheduler {
 	 */
 	public function get_baseline_date( $post_type = 'post' ) {
 		global $wpdb;
-		
+
 		// Query for the latest future post of this post type
-		$latest_future = $wpdb->get_var( $wpdb->prepare(
-			"SELECT post_date 
+		$latest_future = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT post_date 
 			FROM {$wpdb->posts} 
 			WHERE post_type = %s 
 			AND post_status = 'future' 
 			ORDER BY post_date DESC 
 			LIMIT 1",
-			$post_type
-		) );
-		
+				$post_type
+			)
+		);
+
 		if ( $latest_future ) {
 			// Verify the future post is actually in the future
 			$latest_future_gmt = $this->local_to_gmt( $latest_future );
@@ -279,22 +281,22 @@ class DDS_Scheduler {
 				return $latest_future;
 			}
 		}
-		
+
 		// No future posts found or they're in the past
 		// Start from RIGHT NOW + minimum buffer
 		$minimum_minutes = absint( $this->settings->get_setting( 'minimum_future_minutes', 60 ) );
-		$current_gmt = $this->get_current_gmt_timestamp();
-		
+		$current_gmt     = $this->get_current_gmt_timestamp();
+
 		// Add minimum minutes + 5 minute safety buffer
 		$baseline_timestamp = $current_gmt + ( $minimum_minutes * 60 ) + 300;
-		
+
 		// Convert from GMT timestamp to local datetime string
-		$baseline_gmt = gmdate( 'Y-m-d H:i:s', $baseline_timestamp );
+		$baseline_gmt   = gmdate( 'Y-m-d H:i:s', $baseline_timestamp );
 		$baseline_local = get_date_from_gmt( $baseline_gmt );
-		
+
 		return $baseline_local;
 	}
-	
+
 	/**
 	 * Convert local datetime to GMT for WordPress
 	 *
@@ -305,19 +307,19 @@ class DDS_Scheduler {
 		// Use WordPress function if available (WordPress 5.3+)
 		if ( function_exists( 'wp_timezone' ) ) {
 			try {
-				$timezone = wp_timezone();
+				$timezone     = wp_timezone();
 				$gmt_timezone = new DateTimeZone( 'UTC' );
-				
+
 				$local_datetime = new DateTime( $local_date, $timezone );
 				$local_datetime->setTimezone( $gmt_timezone );
-				
+
 				return $local_datetime->format( 'Y-m-d H:i:s' );
 			} catch ( Exception $e ) {
 				// Fallback to WordPress function
 				return get_gmt_from_date( $local_date );
 			}
 		}
-		
+
 		// Fallback for older WordPress versions
 		return get_gmt_from_date( $local_date );
 	}
